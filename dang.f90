@@ -144,11 +144,12 @@ program dang
     !----------------------------------------------------------------------------------------------------------
     !----------------------------------------------------------------------------------------------------------
     ! Choose which bands for fitting templates
-    j_corr01(1) = .true.
+    j_corr01(1) = .false.
     j_corr01(2) = .true.
     j_corr01(3) = .true.
     j_corr01(4) = .true.
-    j_corr01(5) = .false.
+    j_corr01(5) = .true.
+    j_corr01(6) = .true.
 
     j_corr02(1) = .false.
     j_corr02(2) = .false.
@@ -170,7 +171,7 @@ program dang
     joint_comps(1) = 'synch'
     joint_comps(2) = 'template01'
 
-    solver = 'lu' ! Method possibilities are 'cg', 'lu', and 'cholesky'
+    solver = 'cholesky' ! Method possibilities are 'cg', 'lu', and 'cholesky'
     !----------------------------------------------------------------------------------------------------------
     !----------------------------------------------------------------------------------------------------------
     ! Calculation portion
@@ -208,14 +209,14 @@ program dang
 
             ! Extrapolating A_dust to bands
             if (ANY(joint_comps=='dust')) then
-                do i = 0, npix-1
-                    fgs(2)%p(1) = beta_d(i,k)
-                    fgs(2)%p(2) = T_d(i,k)
-                    do j = 1, nbands
-                        fg_amp(i,k,j,3) = fg_amp(i,k,fgs(2)%loc,3)*compute_spectrum(fgs(2),par%dat_nu(j))
-                    end do
-                end do
-                dust_map(:,k,:)         = fg_amp(:,k,:,3)
+               do i = 0, npix-1
+                  fgs(2)%p(1) = beta_d(i,k)
+                  fgs(2)%p(2) = T_d(i,k)
+                  do j = 1, nbands
+                     fg_amp(i,k,j,3) = fg_amp(i,k,fgs(2)%loc,3)*compute_spectrum(fgs(2),par%dat_nu(j))
+                  end do
+               end do
+               dust_map(:,k,:)         = fg_amp(:,k,:,3)
             end if
 
             ! Applying dust templates to make dust maps
@@ -227,14 +228,14 @@ program dang
 
             nodust = maps-dust_map
             ! -------------------------------------------------------------------------------------------------------------------
-            call sample_index(fgs(1),nodust,beta_samp_nside,k)
-            do i = 0, npix-1
-               fgs(1)%p(1) = beta_s(i,k)
-               do j = 1, nbands
-                  fg_amp(i,k,j,1) = fg_amp(i,k,fgs(1)%loc,1)*compute_spectrum(fgs(1),par%dat_nu(j))
-               end do
-            end do
-            synch_map(:,k,:)        = fg_amp(:,k,:,1)
+!            call sample_index(fgs(1),nodust,beta_samp_nside,k)
+!            do i = 0, npix-1
+!               fgs(1)%p(1) = beta_s(i,k)
+!               do j = 1, nbands
+!                  fg_amp(i,k,j,1) = fg_amp(i,k,fgs(1)%loc,1)*compute_spectrum(fgs(1),par%dat_nu(j))
+!               end do
+!            end do
+!            synch_map(:,k,:)        = fg_amp(:,k,:,1)
             ! -------------------------------------------------------------------------------------------------------------------
 
             res       = maps - synch_map - dust_map
@@ -285,10 +286,10 @@ program dang
         rj_cmb = ((exp(y)-1)**2.d0)/(y**2.d0*exp(y))
 
         if (trim(self%type) == 'synch') then
-            compute_spectrum = (freq/self%nu_ref)**self%p(1) !*rj_cmb
+           compute_spectrum = (freq/self%nu_ref)**self%p(1) !*rj_cmb
         else if (trim(self%type) == 'dust') then
-            z = h / (k_B*self%p(2))
-            compute_spectrum = (exp(z*self%nu_ref*1d9)-1.d0) / (exp(z*freq*1d9)-1.d0) * (freq/self%nu_ref)**(self%p(1)+1.d0)!*rj_cmb
+           z = h / (k_B*self%p(2))
+           compute_spectrum = (exp(z*self%nu_ref*1d9)-1.d0) / (exp(z*freq*1d9)-1.d0) * (freq/self%nu_ref)**(self%p(1)+1.d0)!*rj_cmb
         end if
 
     end function compute_spectrum
@@ -679,7 +680,7 @@ program dang
         ! where T_nu and a are defined below, and d_nu is the data at band nu.  |
         !                                                                       |
         ! For the matrix equation, A = sum_nu ((T_nu)^T N_nu^-1 T_nu), b = amp, |
-        !                      and c =  sum_nu ((T_nu)^T d_nu).                 !                
+        !                      and c = sum_nu ((T_nu)^T d_nu).                  !                
         ! If I have this correct, A should be n x n where n=npix+nband-1, which |
         ! checks out since a is npix+nband-1.                                   |
         !------------------------------------------------------------------------
@@ -731,27 +732,28 @@ program dang
         allocate(A_1(y,x,z),A_2(y,y,z))
         allocate(A(y,y),b(y),c(y),d(y),A_inv(y,y))
         allocate(mat_l(y,y),mat_u(y,y))
-        allocate(samp(y),rand(y), norm(y,y))
+        allocate(samp(y),rand(y),norm(y,y))
         allocate(covar(x,x,z),c_1(x,z),c_2(y,z))
 
         ! Initialize arrays
-        covar(:,:,:)      = 0.d0
-        T_nu(:,:,:)       = 0.d0
-        A_1(:,:,:)        = 0.d0
-        A_2(:,:,:)        = 0.d0
-        A(:,:)            = 0.d0
-        A_inv(:,:)        = 0.d0
-        b(:)              = 0.d0
-        c(:)              = 0.d0
-        d(:)              = 0.d0
-        rand(:)           = 0.d0
-        samp(:)           = 0.d0
-        norm(:,:)         = 0.d0
-        dats(:,:)         = 0.d0
-        mat_l(:,:)        = 0.d0
-        mat_u(:,:)        = 0.d0
-        c_1(:,:)          = 0.d0
-        c_2(:,:)          = 0.d0
+        covar  = 0.d0
+        T_nu   = 0.d0
+        T_nu_T = 0.d0
+        A_1    = 0.d0
+        A_2    = 0.d0
+        A      = 0.d0
+        A_inv  = 0.d0
+        b      = 0.d0
+        c      = 0.d0
+        d      = 0.d0
+        rand   = 0.d0
+        samp   = 0.d0
+        norm   = 0.d0
+        dats   = 0.d0
+        mat_l  = 0.d0
+        mat_u  = 0.d0
+        c_1    = 0.d0
+        c_2    = 0.d0
 
         ! Fill data and covariance arrays
         do i=1, x
@@ -821,13 +823,13 @@ program dang
             A_1(:,:,j)    = matmul(T_nu_T(:,:,j),inv(covar(:,:,j)))
             A_2(:,:,j)    = matmul(A_1(:,:,j),T_nu(:,:,j)) 
             A(:,:)        = A(:,:) + A_2(:,:,j)
-            c(:)          = c(:) + c_2(:,j)
+            c(:)          = c(:)   + c_2(:,j)
         end do
 
         ! Computation
         if (trim(method) == 'cholesky') then
             if (mod(iter,output_iter) .EQ. 0) then
-                write(*,*) 'Joint sampling using Cholesky Decomp'
+               write(*,*) 'Joint sampling using Cholesky Decomp'
             end if
             call cholesky_decomp(A,mat_l,y)
             mat_u  = transpose(mat_l)
@@ -835,12 +837,12 @@ program dang
             call backward_sub(mat_u,b,d)
         else if (trim(method) == 'cg') then
             if (mod(iter,output_iter) .EQ. 0) then
-                write(*,*) 'Joint sampling using CG'
+               write(*,*) 'Joint sampling using CG'
             end if
             call compute_cg(A,b,c,y)
         else if (trim(method) == 'lu') then
             if (mod(iter,output_iter) .EQ. 0) then
-                write(*,*) 'Joint sampling using LU Decomp'
+               write(*,*) 'Joint sampling using LU Decomp'
             end if
             call LUDecomp(A,mat_l,mat_u,y)
             call forward_sub(mat_l,d,c)
@@ -852,10 +854,12 @@ program dang
         A_inv = inv(A)
         call cholesky_decomp(A_inv,norm,y)
         do i = 1, y
-            rand(i) = rand_normal(0.d0,1.d0)
+           rand(i) = rand_normal(0.d0,1.d0)
         end do
         samp  = matmul(norm,rand)
-        b     = b  + samp
+        b     = b ! + samp
+
+        write(*,*) b
 
         ! Output amplitudes to the appropriate variables
         do m = 1, size(joint_comps)
