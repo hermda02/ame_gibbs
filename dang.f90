@@ -64,10 +64,11 @@ program dang
 
     call read_param_file(par)
 
-    write(*,*) par%ncomp
-    write(*,*) par%fg_label
-    write(*,*) par%fg_type
-    write(*,*) par%fg_nu_ref
+!    write(*,*) par%ncomp
+!    write(*,*) par%fg_label
+!    write(*,*) par%fg_type
+!    write(*,*) par%fg_nu_ref
+    write(*,*) par%fg_gauss
     stop
 
     !----------------------------------------------------------------------------------------------------------
