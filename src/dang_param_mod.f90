@@ -27,6 +27,7 @@ module dang_param_mod
                                                   
         ! Data parameters
         integer(i4b)                                    :: numband       ! Number of bands
+        integer(i4b)                                    :: numinc        ! Number of included bands
         character(len=512)                              :: datadir       ! Directory to look for bandfiles in
         character(len=512)                              :: bp_dir        ! Directory for BP swap maps
         character(len=512)                              :: mask_file     ! Mask filename
@@ -37,6 +38,7 @@ module dang_param_mod
         real(dp),           allocatable, dimension(:)   :: init_gain     ! initial gain value for each band
         real(dp),           allocatable, dimension(:)   :: init_offs     ! initial offset value for each band
         character(len=512), allocatable, dimension(:)   :: dat_unit      ! Band units (uK_CMB, uK_RJ, MJy/sr)
+        logical(lgt),       allocatable, dimension(:)   :: band_inc      ! True false (know when to swap)
         logical(lgt),       allocatable, dimension(:)   :: bp_map        ! True false (know when to swap)
         logical(lgt),       allocatable, dimension(:)   :: fit_gain      ! Do we fit the gain for this band?
         logical(lgt),       allocatable, dimension(:)   :: fit_offs      ! Do we fit the offset for this band?
@@ -412,14 +414,14 @@ contains
         type(params),       intent(inout) :: par
 
         integer(i4b)     :: i, j, n, len_itext
-        character(len=2) :: itext
-        character(len=2) :: jtext
+        character(len=3) :: itext
 
         write(*,*) "Read data parameters."
 
         len_itext = len(trim(itext))
 
         call get_parameter_hashtable(htbl, 'NUMBAND',    par_int=par%numband)
+        call get_parameter_hashtable(htbl, 'NUMINCLUDE', par_int=par%numinc)
         call get_parameter_hashtable(htbl, 'DATA_DIRECTORY', par_string=par%datadir)
         call get_parameter_hashtable(htbl, 'MASKFILE', par_string=par%mask_file)
 
@@ -430,6 +432,8 @@ contains
         allocate(par%dat_unit(n))
         allocate(par%bp_map(n))
         allocate(par%dust_corr(n))
+
+        allocate(par%band_inc(n))
 
         allocate(par%init_gain(n))
         allocate(par%init_offs(n))
@@ -446,6 +450,7 @@ contains
             call get_parameter_hashtable(htbl, 'BAND_INIT_GAIN'//itext, len_itext=len_itext, par_dp=par%init_gain(i))
             call get_parameter_hashtable(htbl, 'BAND_FIT_GAIN'//itext, len_itext=len_itext, par_lgt=par%fit_gain(i))
             !call get_parameter_hashtable(htbl, 'BAND_INIT_OFFSET'//itext, len_itext=len_itext, par_dp=par%init_offs(i))
+            call get_parameter_hashtable(htbl, 'INCLUDE_BAND'//itext, len_itext=len_itext, par_lgt=par%band_inc(i))
             call get_parameter_hashtable(htbl, 'BAND_BP'//itext, len_itext=len_itext, par_lgt=par%bp_map(i))
             call get_parameter_hashtable(htbl, 'DUST_CORR'//itext, len_itext=len_itext, par_lgt=par%dust_corr(i))
          end do
@@ -460,7 +465,7 @@ contains
         integer(i4b)     :: i, j, n, n2, n3
         integer(i4b)     :: len_itext, len_jtext
         character(len=2) :: itext
-        character(len=2) :: jtext
+        character(len=3) :: jtext
 
         write(*,*) "Read component parameters."
 

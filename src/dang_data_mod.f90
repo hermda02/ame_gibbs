@@ -20,12 +20,16 @@ module dang_data_mod
 
     real(dp), allocatable, dimension(:)       :: gain
     real(dp), allocatable, dimension(:)       :: offset
+    integer(i4b), allocatable, dimension(:)   :: incl
+    real(dp), allocatable, dimension(:)       :: nu
     
     real(dp), allocatable, dimension(:,:)     :: masks
 
     real(dp), allocatable, dimension(:,:,:)   :: temps
    
     real(dp), allocatable, dimension(:,:,:)   :: temp_amps
+
+
   end type data
 
 contains
@@ -65,6 +69,16 @@ contains
     self%offset = 0.d0
 
   end subroutine init_data_maps
+
+  subroutine init_data_var(self,nbands)
+    implicit none
+    type(data)               :: self
+    integer(i4b), intent(in) :: nbands
+
+    allocate(self%incl(nbands))
+    allocate(self%nu(nbands))
+
+  end subroutine init_data_var
 
   subroutine init_template(self,npix,nmaps,ntemp)
     implicit none

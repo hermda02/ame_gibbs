@@ -13,18 +13,18 @@ module utility_mod
     real(dp)           :: nullval
     real(dp)           :: missval = -1.6375d30
     integer(i4b)       :: ierr, rank, numprocs
-    integer(i4b)       :: nbands, npix, nmaps, nside, nfgs
-    integer(i4b)       :: iter, niter, ordering, nlheader
+    integer(i4b)       :: nbands, npix, nmaps, nside, nfgs, ninc
+    integer(i4b)       :: iter, niter, ordering1, ordering2, nlheader
     integer(i4b)       :: proc_per_band
     integer(i4b)       :: master      = 0 
     integer(i4b)       :: from_master = 1
     integer(i4b)       :: from_worker = 2
     logical(lgt)       :: anynull
     integer(i4b) status(mpi_status_size)
-    character(len=80), dimension(180) :: header
+    character(len=80), dimension(180) :: header1, header2
     character(len=80), dimension(3)   :: tqu
     
-    public    :: npix, nbands, nmaps, ordering, header
+    public    :: npix, nbands, nmaps, ordering1, ordering2, header1, header2
 
 
 contains 

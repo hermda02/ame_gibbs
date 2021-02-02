@@ -620,13 +620,13 @@ contains
         end do
 
         if (nside1 /= nside2) then 
-            if (ordering == 1) then
+            if (ordering1 == 1) then
                 call udgrade_ring(indx,nside1,indx_low,nside2)
             else
                 call udgrade_nest(indx,nside1,indx_low,nside2)
             end if
             do j = 1, nbands
-                if (ordering == 1) then
+                if (ordering1 == 1) then
                     call convert_nest2ring(nside1,map2fit(:,:,j))
                     call convert_nest2ring(nside1,dat%fg_map(:,:,j,1))
                     call convert_nest2ring(nside2,rms_low(:,:,j))
@@ -785,7 +785,7 @@ contains
         end if
 
         if (nside1 /= nside2) then
-            if (ordering == 1) then
+            if (ordering1 == 1) then
                 call udgrade_ring(indx_sample_low,nside2,indx_sample,nside1,fmissval=missval)
                 call convert_nest2ring(nside2,indx_sample_low)
             else
@@ -837,13 +837,13 @@ contains
       type(component)                                        :: comp
       integer(i4b), intent(in)                               :: map_n
       integer(i4b)                                           :: nside1, npix2, nside2
-      real(dp), dimension(0:npix-1,nmaps,nbands)             :: cov
+      real(dp), dimension(0:npix-1,nmaps,ninc)               :: cov
       real(dp), dimension(0:npix-1,nmaps)                    :: te
       real(dp), dimension(0:npix-1)                          :: te_sample
       real(dp), allocatable, dimension(:,:,:)                :: maps_low, cov_low
       real(dp), allocatable, dimension(:,:)                  :: T_low
       real(dp), allocatable, dimension(:)                    :: sample_T_low
-      real(dp), dimension(nbands)                            :: signal, tmp
+      real(dp), dimension(ninc)                            :: signal, tmp
       real(dp), dimension(2)                                 :: x
       real(dp)                                               :: a, b, c, num, sam, t, p, sol, naccept_t_d
       
@@ -852,7 +852,7 @@ contains
 
       sam = 0.0
       
-      nside2 = 64
+      nside2 = 16!64
       
       nside1 = npix2nside(npix)
       if (nside1 == nside2) then
@@ -860,8 +860,8 @@ contains
       else
          npix2 = nside2npix(nside2)
       end if
-      allocate(maps_low(0:npix2-1,nmaps,nbands))
-      allocate(T_low(0:npix2-1,nmaps),cov_low(0:npix2-1,nmaps,nbands))
+      allocate(maps_low(0:npix2-1,nmaps,ninc))
+      allocate(T_low(0:npix2-1,nmaps),cov_low(0:npix2-1,nmaps,ninc))
       allocate(sample_T_low(0:npix2-1))
       
       ! if (nside1 /= nside2) then 
@@ -870,7 +870,7 @@ contains
       !     else
       !         call udgrade_nest(te,nside1,T_low,nside2)
       !     end if
-      !     do j = 1, nbands
+      !     do j = 1, ninc
       !         if (ordering == 1) then
       !             call udgrade_ring(map2fit(:,:,j),nside1,band_low(:,:,j),nside2)
       !             call convert_nest2ring(nside1,map2fit(:,:,j))
@@ -883,7 +883,7 @@ contains
       !     end do
       !     cov_low = sqrt(cov_low / (npix/npix2))
       ! else
-      do j = 1, nbands
+      do j = 1, ninc
          maps_low(:,:,j)   = dat%sig_map(:,:,j)
          cov_low(:,:,j)    = cov(:,:,j)
       end do
@@ -902,7 +902,7 @@ contains
             sol = T_low(i,map_n)
             
             ! Chi-square from the most recent Gibbs chain update
-            do j = 1, nbands
+            do j = 1, ninc
                a = a + (((comp%HI_amps(j)*comp%HI(i,1)*planck(self%dat_nu(j)*1.d9,sol)) &
                     - (maps_low(i,map_n,j)-dat%offset(j))/dat%gain(j))**2.d0)/cov_low(i,map_n,j)
             end do
@@ -913,7 +913,7 @@ contains
                t = rand_normal(sol,self%HI_Td_std)
                !t = rand_normal(self%HI_Td_mean,self%HI_Td_std)
                b = 0.d0
-               do j = 1, nbands
+               do j = 1, ninc
                   tmp(j) = comp%HI_amps(j)*comp%HI(i,1)*planck(self%dat_nu(j)*1.d9,t)
                   b      = b + ((tmp(j)-(maps_low(i,map_n,j)-dat%offset(j))/dat%gain(j))**2.d0)/cov_low(i,map_n,j)
                end do
@@ -944,7 +944,7 @@ contains
          end if
       end do
       if (nside1 /= nside2) then
-         if (ordering == 1) then
+         if (ordering1 == 1) then
             call udgrade_ring(sample_T_low, nside2, te_sample, nside1)
             call convert_nest2ring(nside2, sample_T_low)
          else

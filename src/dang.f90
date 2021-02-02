@@ -70,17 +70,18 @@ program dang
   tqu(2)            = 'Q'
   tqu(3)            = 'U'
   if (trim(par%mode) == 'comp_sep') then
-     i              = getsize_fits(par%temp_file(1), nside=nside, ordering=ordering, nmaps=nmaps)
+     i              = getsize_fits(par%temp_file(1), nside=nside, ordering=ordering1, nmaps=nmaps)
   else if (trim(par%mode) == 'hi_fit') then
-     i                 = getsize_fits(par%mask_file, nside=nside, ordering=ordering, nmaps=nmaps)
+     i              = getsize_fits(trim(par%datadir)//trim(par%HI_file), nside=nside, ordering=ordering1, nmaps=nmaps)
   else
      write(*,*) 'Unrecognized operational mode. Do better!'
   end if
   dang_data%npix    = nside2npix(nside) 
   npix              = dang_data%npix
   nbands            = par%numband
+  ninc              = par%numinc
   nfgs              = par%ncomp+par%ntemp
-  nlheader          = size(header)
+  nlheader          = size(header1)
   nmaps             = nmaps
   iterations        = par%nsample              ! # of iterations in the samplers
   if (par%bp_swap) then
@@ -122,11 +123,11 @@ program dang
      !----------------------------------------------------------------------------------------------------------
      ! Read maps
      do i = 1, par%ntemp
-        call read_bintab(par%temp_file(i), dang_data%temps(:,:,i), npix,nmaps,nullval,anynull,header=header)
+        call read_bintab(par%temp_file(i), dang_data%temps(:,:,i), npix,nmaps,nullval,anynull,header=header1)
      end do
   
      write(*,*) 'Reading MASKFILE'
-     call read_bintab(par%mask_file,dang_data%masks,npix,1,nullval,anynull,header=header)
+     call read_bintab(par%mask_file,dang_data%masks,npix,1,nullval,anynull,header=header2)
      do i = 0, npix-1
         do j = 1, nmaps
            if (dang_data%masks(i,j) == 0.d0) dang_data%masks(i,j) = missval
@@ -139,10 +140,10 @@ program dang
         ! If not supposed to be swapped BP maps, load that map
         if (.not. par%bp_map(j)) then
            call read_bintab(trim(par%datadir) // trim(par%dat_noisefile(j)), &
-                rms,npix,nmaps,nullval,anynull,header=header)
+                rms,npix,nmaps,nullval,anynull,header=header2)
            dang_data%rms_map(:,:,j) = rms
            call read_bintab(trim(par%datadir) // trim(par%dat_mapfile(j)), &
-                map,npix,nmaps,nullval,anynull,header=header)
+                map,npix,nmaps,nullval,anynull,header=header2)
            dang_data%sig_map(:,:,j) = map
         end if
      end do
@@ -166,11 +167,12 @@ program dang
      call comp_sep
   
   else if (trim(par%mode) == 'hi_fit') then
-     call init_data_maps(dang_data,npix,nmaps,nbands)
+     call init_data_maps(dang_data,npix,nmaps,ninc)
      call init_mask_maps(dang_data,npix,nmaps)
      call init_template(dang_data,npix,nmaps,par%ntemp)
-     call init_temp_amps(dang_data,nbands,nmaps,par%ntemp)
-     call init_hi_fit(comp, par, npix)
+     call init_temp_amps(dang_data,ninc,nmaps,par%ntemp)
+     call init_data_var(dang_data,ninc)
+     call init_hi_fit(comp,par,npix)
 
      do i = 0, npix-1
         if (comp%HI(i,1) > par%thresh) then
@@ -180,23 +182,54 @@ program dang
         end if
      end do
 
+
+     k = 1
      ! Read maps in
      do j = 1, nbands
-        call read_bintab(trim(par%datadir) // trim(par%dat_noisefile(j)), &
-             rms,npix,nmaps,nullval,anynull,header=header)
-        dang_data%rms_map(:,:,j) = rms
-        call read_bintab(trim(par%datadir) // trim(par%dat_mapfile(j)), &
-             map,npix,nmaps,nullval,anynull,header=header)
-        dang_data%sig_map(:,:,j) = map
-        ! Initialize gain and offset values from parameter file
-        dang_data%gain(j)   = par%init_gain(j)
-        dang_data%offset(j) = 0.d0 
+        ! Only load data and parameters for bands to be included in analysis
+        if (par%band_inc(j)) then
+           dang_data%incl(k) = j
+           dang_data%nu(k)   = par%dat_nu(j)
+           call read_bintab(trim(par%datadir) // trim(par%dat_noisefile(j)), &
+                rms,npix,nmaps,nullval,anynull,header=header2)
+           ! Check map ordering to make sure everything matches up with the reference
+           ! ordering
+           i = getsize_fits(trim(par%datadir) // trim(par%dat_noisefile(j)), &
+                nside=nside, ordering=ordering2, nmaps=nmaps)
+           if (ordering2 > ordering1) then
+              call convert_nest2ring(nside,rms)
+           else if (ordering2 < ordering1) then
+              call convert_ring2nest(nside,rms)
+           end if
+           dang_data%rms_map(:,:,k) = rms
+           call read_bintab(trim(par%datadir) // trim(par%dat_mapfile(j)), &
+                map,npix,nmaps,nullval,anynull,header=header2)
+           ! Check map ordering to make sure everything matches up with the reference
+           ! ordering
+           i = getsize_fits(trim(par%datadir) // trim(par%dat_mapfile(j)), &
+                nside=nside, ordering=ordering2, nmaps=nmaps)
+           if (ordering2 > ordering1) then
+              call convert_nest2ring(nside,map)
+           else if (ordering2 < ordering1) then
+              call convert_ring2nest(nside,map)
+           end if
+           dang_data%sig_map(:,:,k) = map
+           ! Initialize gain and offset values from parameter file
+           dang_data%gain(k)   = par%init_gain(j)
+           dang_data%offset(k) = 0.d0
+           k = k + 1
+           write(*,*) j
+        end if
      end do
 
-     par%fit_offs(:) = .true.
+     write(*,*) dang_data%incl
+     stop
+
+     par%fit_offs(:) = .false.!.true.
      
      deallocate(map,rms)
 
+     write(*,*) 'Call hi_fit'
      call hi_fit 
   
   end if
@@ -380,30 +413,26 @@ contains
 
        if (iter > 1) then
           write(*,*) 'Calc HI gain offset'
-          do j = 1, nbands
-             if (par%fit_gain(j)) then
+          do j = 1, ninc
+             if (par%fit_gain(dang_data%incl(j))) then
                 call sample_band_gain(par, dang_data, comp, 1, j, 1, 1)
              end if
-             if (par%fit_offs(j)) then
+             if (par%fit_offs(dang_data%incl(j))) then
                 call sample_band_offset(par, dang_data, comp, 1, j, 1)
              end if
-             ! if (par%fit_gain(j) .and. par%fit_offs(j)) then
-             !    call calc_HI_gain_offset(par, dang_data, comp, 1, 1, j)
-             ! else if (par%fit_gain(j) .and. .not. par%fit_offs(j)) then
-             !    call sample_band_gain(par, dang_data, comp, 1, 1, j)
-             ! else if (par%fit_offs(j) .and. .not. par%fit_gain(j)) then
-             !    call sample_band_offset(par, dang_data, comp, 1, 1, j)
-             ! end if
           end do
-          write(*,"(12x,8(A16))") par%dat_label
-          write(*,"(a8,8(E16.4))") 'Gain: ',dang_data%gain
-          write(*,"(a8,8(E16.4))") 'Offset: ',dang_data%offset
+          !write(*,"(12x,8(A16))") par%dat_label
+          !write(*,"(a8,8(E16.4))") 'Gain: ',dang_data%gain
+          !write(*,"(a8,8(E16.4))") 'Offset: ',dang_data%offset
        end if
 
+       write(*,*) 'Call template_fit'
        call template_fit(par, dang_data, comp, 1)
+       write(*,*) 'Call sample_HI_T'
        call sample_HI_T(par, dang_data, comp, 1)
 
-       do j = 1, nbands
+       write(*,*) 'create residual maps'
+       do j = 1, ninc
           do i = 0, npix-1
              if (dang_data%masks(i,1) == missval .or. dang_data%masks(i,1) == 0.d0) cycle
              dang_data%res_map(i,1,j) = (dang_data%sig_map(i,1,j)-dang_data%offset(j))/dang_data%gain(j) &
@@ -411,18 +440,25 @@ contains
           end do
        end do
 
+       write(*,*) 'compute_chisq'
        call compute_chisq(1,chisq,par%mode)
 
        if (rank == master) then
           if (mod(iter, 1) == 0 .or. iter == 1) then
-             write(*,fmt='(i6, a, E10.3, a, e10.3, a, 10e10.3)')&
-                  iter, " - chisq: " , chisq, " - T_d: ",&
-                  mask_avg(comp%T_d(:,1),dang_data%masks(:,1)), ' - A_HI: ', comp%HI_amps
+             ! write(*,fmt='(i6, a, E10.3, a, e10.3, a, 10e10.3)')&
+             !      iter, " - chisq: " , chisq, " - T_d: ",&
+             !      mask_avg(comp%T_d(:,1),dang_data%masks(:,1)), ' - A_HI: ', comp%HI_amps
+             ! write(*,fmt='(a)') '---------------------------------------------'
+             write(*,fmt='(i6, a, E10.3)')&!, a, e10.3, a, 10e10.3)')&
+                  iter, " - chisq: " , chisq!, " - T_d: ",&
+                  !mask_avg(comp%T_d(:,1),dang_data%masks(:,1)), ' - A_HI: ', comp%HI_amps
              write(*,fmt='(a)') '---------------------------------------------'
           end if
           if (mod(iter,output_iter) .EQ. 0) then
+             write(*,*) 'write_maps'
              call write_maps(1,par%mode)
           end if
+          write(*,*) 'write_data'
           call write_data(par%mode)
        end if
        write(*,*) ''
@@ -444,6 +480,7 @@ contains
        
        write(iter_str, '(i0.5)') iter
        if (output_fg .eqv. .true.) then
+          write(*,*) 'Write foreground maps'
           do j = 1, nbands
              do i = 1, par%ntemp
                 title = trim(direct) // trim(par%dat_label(j)) //'_'// trim(par%temp_label(i)) //&
@@ -454,7 +491,7 @@ contains
                       map(n,1) = missval
                    end if
                 end do
-                call write_bintab(map,npix,1, header, nlheader, trim(title))
+                call write_bintab(map,npix,1, header1, nlheader, trim(title))
              end do
              title = trim(direct) // trim(par%dat_label(j)) // '_synch_amplitude_' //  trim(tqu(nm)) &
                   // '_' // trim(iter_str) // '.fits'
@@ -464,7 +501,7 @@ contains
                    map(n,1) = missval
                 end if
              end do
-             call write_bintab(map,npix,1, header, nlheader, trim(title))
+             call write_bintab(map,npix,1, header1, nlheader, trim(title))
           end do
        else 
           title = trim(direct) // trim(par%dat_label(par%fg_ref_loc(1))) // '_synch_amplitude_' //  trim(tqu(nm)) &
@@ -475,8 +512,9 @@ contains
                 map(n,1) = missval
              end if
           end do
-          call write_bintab(map,npix,1, header, nlheader, trim(title))
+          call write_bintab(map,npix,1, header1, nlheader, trim(title))
        end if
+       write(*,*) 'Write residual maps'
        do j = 1, nbands
           title = trim(direct) // trim(par%dat_label(j)) // '_residual_' // trim(tqu(nm)) & 
                // '_' // trim(iter_str) // '.fits'
@@ -486,8 +524,9 @@ contains
                 map(n,1) = missval
              end if
           end do
-          call write_bintab(map,npix,1, header, nlheader, trim(title))
+          call write_bintab(map,npix,1, header1, nlheader, trim(title))
        end do
+       write(*,*) 'Write synch beta map'
        title = trim(direct) // 'synch_beta_' // trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
        map(:,1)   = comp%beta_s(:,nm)
        do n = 0, npix-1
@@ -495,7 +534,7 @@ contains
              map(n,1) = missval
           end if
        end do
-       call write_bintab(map,npix,1, header, nlheader, trim(title))
+       call write_bintab(map,npix,1, header1, nlheader, trim(title))
        dang_data%chi_map = 0.d0
        do i = 0, npix-1
           do j = 1, nbands
@@ -515,7 +554,8 @@ contains
              map(n,1) = missval
           end if
        end do
-       call write_bintab(map,npix,1, header, nlheader, trim(title))
+       write(*,*) 'Write chisq map'
+       call write_bintab(map,npix,1, header1, nlheader, trim(title))
     else if (trim(mode) == 'hi_fit') then
 
        write(iter_str, '(i0.5)') iter
@@ -528,7 +568,7 @@ contains
                 map(n,1) = missval
              end if
           end do
-          call write_bintab(map,npix,1, header, nlheader, trim(title))
+          call write_bintab(map,npix,1, header1, nlheader, trim(title))
        end do
 
        do j = 1, nbands
@@ -539,7 +579,7 @@ contains
                 map(n,1) = missval
              end if
           end do
-          call write_bintab(map,npix,1, header, nlheader, trim(title))
+          call write_bintab(map,npix,1, header1, nlheader, trim(title))
        end do
 
        title = trim(direct) // 'T_d_'// trim(iter_str) // '.fits'
@@ -549,7 +589,7 @@ contains
              map(n,1) = missval
           end if
        end do
-       call write_bintab(map,npix,1, header, nlheader, trim(title))
+       call write_bintab(map,npix,1, header1, nlheader, trim(title))
        dang_data%chi_map = 0.d0
        do i = 0, npix-1
           do j = 1, nbands
@@ -565,7 +605,7 @@ contains
              map(n,1) = missval
           end if
        end do
-       call write_bintab(map,npix,1, header, nlheader, trim(title))
+       call write_bintab(map,npix,1, header1, nlheader, trim(title))
           
     end if
     
@@ -641,7 +681,7 @@ contains
        else
           open(35,file=title,status="new",action="write")
        end if
-       write(35,'(10(E17.8))') comp%HI_amps
+       write(35,'(210(E17.8))') comp%HI_amps
        close(35)
        
        title = trim(direct)//'HI_chisq.dat'
@@ -663,7 +703,7 @@ contains
           open(37,file=title,status="new",action="write")
           write(37,"(3x,8(A16))") par%dat_label
        end if
-       write(37,"(8(E16.4))") dang_data%gain
+       write(37,"(210(E16.4))") dang_data%gain
        close(37)
 
        title = trim(direct)//'band_offsets.dat'
@@ -674,7 +714,7 @@ contains
           open(38,file=title,status="new",action="write")
           write(38,"(3x,8(A16))") par%dat_label
        end if
-       write(38,"(8(E16.4))") dang_data%offset
+       write(38,"(210(E16.4))") dang_data%offset
        close(38)
        
     end if

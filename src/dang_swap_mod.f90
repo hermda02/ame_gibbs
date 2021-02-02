@@ -37,9 +37,9 @@ contains
           write(*,'(a,a,a)') 'Swapping band ', trim(param%dat_label(j)), '.'
           !write(*,*) trim(bp_maps(j,1))
           !write(*,*) trim(bp_maps(j,2))
-          call read_bintab(trim(bp_maps(j,1)),map,dat%npix,3,nullval,anynull,header=header)
+          call read_bintab(trim(bp_maps(j,1)),map,dat%npix,3,nullval,anynull,header=header2)
           dat%sig_map(:,:,j) = map
-          call read_bintab(trim(bp_maps(j,2)),rms,dat%npix,3,nullval,anynull,header=header)
+          call read_bintab(trim(bp_maps(j,2)),rms,dat%npix,3,nullval,anynull,header=header2)
           dat%rms_map(:,:,j) = rms
        end if
     end do
