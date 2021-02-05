@@ -84,13 +84,13 @@ program dang
   nlheader          = size(header1)
   nmaps             = nmaps
   iterations        = par%nsample              ! # of iterations in the samplers
-  if (par%bp_swap) then
-     niter          = (par%bp_max - par%bp_burnin)*par%num_chains
-     bp_iter        = par%bp_burnin
-     chain_num      = 1
-  else
-     niter          = par%ngibbs               ! # of MC-MC iterations
-  end if
+  ! if (par%bp_swap) then
+  !    niter          = (par%bp_max - par%bp_burnin)*par%num_chains
+  !    bp_iter        = par%bp_burnin
+  !    chain_num      = 1
+  ! else
+  niter             = par%ngibbs               ! # of MC-MC iterations
+  ! end if
   output_iter       = par%iter_out             ! Output maps every <- # of iterations
   output_fg         = par%output_fg            ! Option for outputting foregrounds for all bands
   direct            = par%outdir               ! Output directory name
@@ -104,6 +104,9 @@ program dang
   !----------------------------------------------------------------------------------------------------------
   !----------------------------------------------------------------------------------------------------------
   ! Either do component separation, or carry out the HI fit
+
+  call RANDOM_SEED()
+
   if (trim(par%mode) == 'comp_sep') then
      ! Joint Sampler Info
      !----------------------------------------------------------------------------------------------------------
@@ -162,8 +165,7 @@ program dang
      
      dang_data%fg_map    = 0.0
      dang_data%temp_amps = 0.0
-  
-  
+
      call comp_sep
   
   else if (trim(par%mode) == 'hi_fit') then
@@ -246,22 +248,22 @@ contains
     !----------------------------------------------------------------------------------------------------------
 
     do iter = 1, niter
-       
-       ! ------------ BP SWAP CHUNK ------------------------------------------------------------------
+
+       ! ------------ BP SWAP CHUNK ----------------------------------------------------------------$
        if (par%bp_swap) then
-          if (bp_iter > par%bp_max) then
-             write(*,*) ''
-             write(*,fmt='(a)') 'Switching to chain '// trim(par%bp_chain_list(chain_num+1))
-             write(*,*) ''
-             chain_num = chain_num + 1
-             bp_iter   = par%bp_burnin
-          end if
-          call swap_bp_maps(dang_data,par,bp_iter,par%bp_chain_list(chain_num))
+          ! if (bp_iter > par%bp_max) then
+          !    write(*,*) ''
+          !    write(*,fmt='(a)') 'Switching to chain '// trim(par%bp_chain_list(chain_num+1))
+          !    write(*,*) ''
+          !    chain_num = chain_num + 1
+          !    bp_iter   = par%bp_burnin
+          ! end if
+          call swap_bp_maps(dang_data,par)!,bp_iter),par%bp_chain_list(chain_num))
           write(*,*) ''
           bp_iter = bp_iter + 1
           call convert_maps_bp(par)
           write(*,*) ''
-          ! Check to see if any swapped maps need to be dust corrected
+          ! Check to see if any swapped maps need to be dust corrected                               
           do j = 1, nbands
              if ( par%bp_map(j)) then
                 if (par%dust_corr(j)) then
@@ -271,6 +273,23 @@ contains
           end do
           write(*,*) ''
        end if
+       
+       ! ! ------------ BP SWAP CHUNK ------------------------------------------------------------------
+       ! if (par%bp_swap) then
+       !    call swap_bp_maps(dang_data,par)
+       !    write(*,*) ''
+       !    call convert_maps_bp(par)
+       !    write(*,*) ''
+       !    ! Check to see if any swapped maps need to be dust corrected
+       !    do j = 1, nbands
+       !       if ( par%bp_map(j)) then
+       !          if (par%dust_corr(j)) then
+       !             call dust_correct_band(dang_data,par,comp,j)
+       !          end if
+       !       end if
+       !    end do
+       !    write(*,*) ''
+       ! end if
        ! -------------------------------------------------------------------------------------------------------------------
        
        ! -------------------------------------------------------------------------------------------------------------------
@@ -421,9 +440,9 @@ contains
                 call sample_band_offset(par, dang_data, comp, 1, j, 1)
              end if
           end do
-          !write(*,"(12x,8(A16))") par%dat_label
-          !write(*,"(a8,8(E16.4))") 'Gain: ',dang_data%gain
-          !write(*,"(a8,8(E16.4))") 'Offset: ',dang_data%offset
+          ! write(*,"(12x,8(A16))") par%dat_label
+          ! write(*,"(a8,8(E16.4))") 'Gain: ',dang_data%gain
+          ! write(*,"(a8,8(E16.4))") 'Offset: ',dang_data%offset
        end if
 
        write(*,*) 'Call template_fit'
@@ -445,14 +464,17 @@ contains
 
        if (rank == master) then
           if (mod(iter, 1) == 0 .or. iter == 1) then
-             ! write(*,fmt='(i6, a, E10.3, a, e10.3, a, 10e10.3)')&
-             !      iter, " - chisq: " , chisq, " - T_d: ",&
-             !      mask_avg(comp%T_d(:,1),dang_data%masks(:,1)), ' - A_HI: ', comp%HI_amps
-             ! write(*,fmt='(a)') '---------------------------------------------'
-             write(*,fmt='(i6, a, E10.3)')&!, a, e10.3, a, 10e10.3)')&
-                  iter, " - chisq: " , chisq!, " - T_d: ",&
-                  !mask_avg(comp%T_d(:,1),dang_data%masks(:,1)), ' - A_HI: ', comp%HI_amps
-             write(*,fmt='(a)') '---------------------------------------------'
+             if (nbands .lt. 10) then
+                write(*,fmt='(i6, a, E10.3, a, e10.3, a, 10e10.3)')&
+                     iter, " - chisq: " , chisq, " - T_d: ",&
+                     mask_avg(comp%T_d(:,1),dang_data%masks(:,1)), ' - A_HI: ', comp%HI_amps
+                write(*,fmt='(a)') '---------------------------------------------'
+             else
+                write(*,fmt='(i6, a, E10.3, a, e10.3)')&
+                     iter, " - chisq: " , chisq, " - T_d: ",&
+                     mask_avg(comp%T_d(:,1),dang_data%masks(:,1))
+                write(*,fmt='(a)') '---------------------------------------------'
+             end if
           end if
           if (mod(iter,output_iter) .EQ. 0) then
              write(*,*) 'write_maps'
@@ -491,7 +513,7 @@ contains
                       map(n,1) = missval
                    end if
                 end do
-                call write_bintab(map,npix,1, header1, nlheader, trim(title))
+                call write_result_map(trim(title), nside, ordering, header, map)
              end do
              title = trim(direct) // trim(par%dat_label(j)) // '_synch_amplitude_' //  trim(tqu(nm)) &
                   // '_' // trim(iter_str) // '.fits'
@@ -501,7 +523,7 @@ contains
                    map(n,1) = missval
                 end if
              end do
-             call write_bintab(map,npix,1, header1, nlheader, trim(title))
+             call write_result_map(trim(title), nside, ordering, header, map)
           end do
        else 
           title = trim(direct) // trim(par%dat_label(par%fg_ref_loc(1))) // '_synch_amplitude_' //  trim(tqu(nm)) &
@@ -512,7 +534,7 @@ contains
                 map(n,1) = missval
              end if
           end do
-          call write_bintab(map,npix,1, header1, nlheader, trim(title))
+          call write_result_map(trim(title), nside, ordering, header, map)
        end if
        write(*,*) 'Write residual maps'
        do j = 1, nbands
@@ -524,7 +546,7 @@ contains
                 map(n,1) = missval
              end if
           end do
-          call write_bintab(map,npix,1, header1, nlheader, trim(title))
+          call write_result_map(trim(title), nside, ordering, header, map)
        end do
        write(*,*) 'Write synch beta map'
        title = trim(direct) // 'synch_beta_' // trim(tqu(nm)) // '_' // trim(iter_str) // '.fits'
@@ -534,7 +556,7 @@ contains
              map(n,1) = missval
           end if
        end do
-       call write_bintab(map,npix,1, header1, nlheader, trim(title))
+       call write_result_map(trim(title), nside, ordering, header, map)
        dang_data%chi_map = 0.d0
        do i = 0, npix-1
           do j = 1, nbands
@@ -554,8 +576,7 @@ contains
              map(n,1) = missval
           end if
        end do
-       write(*,*) 'Write chisq map'
-       call write_bintab(map,npix,1, header1, nlheader, trim(title))
+       call write_result_map(trim(title), nside, ordering, header, map)
     else if (trim(mode) == 'hi_fit') then
 
        write(iter_str, '(i0.5)') iter

@@ -415,6 +415,7 @@ contains
 
         integer(i4b)     :: i, j, n, len_itext
         character(len=3) :: itext
+        character(len=2) :: jtext
 
         write(*,*) "Read data parameters."
 
